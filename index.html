@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Health Bracelet Info</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: Arial, sans-serif; background: #f4f6f8; padding: 20px; }
+    .card { background: white; max-width: 480px; margin: 30px auto; padding: 20px; border-radius: 10px; box-shadow: 0 6px 20px rgba(0,0,0,0.06); }
+    h2 { color: #1a9b59; margin-top: 0; }
+    input, textarea { width: 100%; padding: 10px; margin: 8px 0; border-radius: 6px; border: 1px solid #ddd; box-sizing: border-box; }
+    button { padding: 10px 14px; border: none; border-radius: 6px; background: #1a9b59; color: white; cursor: pointer; }
+    .muted { color: #666; font-size: 0.95rem; }
+    code { background:#f0f0f0; padding:4px 6px; border-radius:4px; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="module">
+    // -------------------------
+    // 1) Replace this with your Firebase config (from Firebase console)
+    // -------------------------
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_AUTH_DOMAIN",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_STORAGE_BUCKET",
+      messagingSenderId: "YOUR_SENDER_ID",
+      appId: "YOUR_APP_ID"
+    };
+    // -------------------------
+
+    // 2) Import Firebase modular SDK
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    // 3) DOM root
+    const root = document.getElementById('root');
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get('id');
+
+    function showMessage(title, subtitleHtml='') {
+      root.innerHTML = `<div class="card"><h2>${title}</h2>${subtitleHtml}</div>`;
+    }
+
+    if (!id) {
+      showMessage('QR Code invalid',
+        `<p class="muted">Make sure the scanned link includes <code>?id=bracelet001</code></p>
+         <p class="muted">Example: https://yourusername.github.io/healthbracelet/?id=bracelet001</p>`);
+    } else {
+      loadForId(id);
+    }
+
+    async function loadForId(id) {
+      showMessage('Loading...');
+      const ref = doc(db, 'users', id);
+
+      try {
+        const snap = await getDoc(ref);
+        if (snap.exists()) {
+          const data = snap.data();
+          root.innerHTML = `
+            <div class="card">
+              <h2>👤 ${escapeHtml(data.name || 'No name')}</h2>
+              <p><b>Blood Type:</b> ${escapeHtml(data.blood || '-')}</p>
+              <p><b>Allergies:</b> ${escapeHtml(data.allergies || '-')}</p>
+              <p><b>Condition:</b> ${escapeHtml(data.condition || '-')}</p>
+              <p><b>Emergency Contact:</b> ${escapeHtml(data.contact || '-')}</p>
+              <p class="muted">Bracelet ID: <code>${escapeHtml(id)}</code></p>
+            </div>`;
+        } else {
+          root.innerHTML = `
+            <div class="card">
+              <h2>Fill Your Health Info</h2>
+              <input id="name" placeholder="Full name" />
+              <input id="blood" placeholder="Blood Type (e.g. O+)" />
+              <input id="allergies" placeholder="Allergies (or 'None')" />
+              <input id="condition" placeholder="Medical condition(s)" />
+              <input id="contact" placeholder="Emergency contact (name - phone)" />
+              <button id="saveBtn">Save Information</button>
+              <p class="muted">This bracelet ID: <code>${escapeHtml(id)}</code></p>
+            </div>`;
+
+          document.getElementById('saveBtn').addEventListener('click', async () => {
+            const data = {
+              name: document.getElementById('name').value.trim(),
+              blood: document.getElementById('blood').value.trim(),
+              allergies: document.getElementById('allergies').value.trim(),
+              condition: document.getElementById('condition').value.trim(),
+              contact: document.getElementById('contact').value.trim(),
+              createdAt: new Date().toISOString()
+            };
+            if (!data.name) { alert('Please enter a name.'); return; }
+            try {
+              await setDoc(ref, data);      // write-once enforced by Firestore rules
+              location.reload();
+            } catch (err) {
+              console.error(err);
+              alert('Failed to save. Check console for details. The doc might already exist or rules may block writes.');
+            }
+          });
+        }
+      } catch (err) {
+        console.error(err);
+        showMessage('Error', `<p class="muted">Unable to access database. Check Firebase config and Firestore rules.</p>`);
+      }
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str).replace(/[&<>"']/g, s => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;" }[s]));
+    }
+  </script>
+</body>
+</html>
